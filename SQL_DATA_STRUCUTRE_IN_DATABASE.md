@@ -1,197 +1,256 @@
 -- WARNING: This schema is for context only and is not meant to be run.
 -- Table order and constraints may not be valid for execution.
 
-CREATE TABLE public.admin_users (
-  id uuid NOT NULL DEFAULT uuid_generate_v4(),
-  name text NOT NULL,
-  email text NOT NULL UNIQUE,
-  role text DEFAULT 'admin'::text CHECK (role = ANY (ARRAY['admin'::text, 'moderator'::text])),
-  last_login timestamp with time zone,
-  created_at timestamp with time zone DEFAULT now(),
-  auth_user_id uuid,
-  CONSTRAINT admin_users_pkey PRIMARY KEY (id),
-  CONSTRAINT admin_users_auth_user_id_fkey FOREIGN KEY (auth_user_id) REFERENCES auth.users(id)
-);
-CREATE TABLE public.apis (
+CREATE TABLE public.addresses (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
-  name text NOT NULL,
-  type text NOT NULL CHECK (type = ANY (ARRAY['FREE'::text, 'PRO'::text, 'DISABLED'::text])),
-  global_buy_price numeric DEFAULT 0,
-  global_sell_price numeric DEFAULT 0,
-  default_credit_charge numeric DEFAULT 0,
-  description text,
+  user_id uuid,
+  type text NOT NULL CHECK (type = ANY (ARRAY['billing'::text, 'shipping'::text])),
+  first_name text NOT NULL,
+  last_name text NOT NULL,
+  company text,
+  address1 text NOT NULL,
+  address2 text,
+  city text NOT NULL,
+  state text NOT NULL,
+  postcode text NOT NULL,
+  country text NOT NULL DEFAULT 'Australia'::text,
+  phone text,
   created_at timestamp with time zone DEFAULT now(),
-  updated_at timestamp with time zone DEFAULT now(),
-  service_provider text DEFAULT 'Direct'::text,
-  api_key text NOT NULL,
-  key_status text NOT NULL DEFAULT 'Inactive'::text CHECK (key_status = ANY (ARRAY['Active'::text, 'Inactive'::text])),
-  usage_count integer NOT NULL DEFAULT 0,
-  last_used timestamp with time zone,
-  case_id text,
-  CONSTRAINT apis_pkey PRIMARY KEY (id)
+  CONSTRAINT addresses_pkey PRIMARY KEY (id),
+  CONSTRAINT addresses_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
 );
-CREATE TABLE public.credit_transactions (
-  id uuid NOT NULL DEFAULT uuid_generate_v4(),
-  officer_id uuid,
-  officer_name text NOT NULL,
-  action text NOT NULL CHECK (action = ANY (ARRAY['Renewal'::text, 'Deduction'::text, 'Top-up'::text, 'Refund'::text])),
-  credits numeric NOT NULL,
-  payment_mode text DEFAULT 'Department Budget'::text,
-  remarks text,
-  processed_by uuid,
-  created_at timestamp with time zone DEFAULT now(),
-  CONSTRAINT credit_transactions_pkey PRIMARY KEY (id),
-  CONSTRAINT credit_transactions_officer_id_fkey FOREIGN KEY (officer_id) REFERENCES public.officers(id)
-);
-CREATE TABLE public.live_requests (
-  id uuid NOT NULL DEFAULT uuid_generate_v4(),
-  officer_id uuid,
-  officer_name text NOT NULL,
-  type text NOT NULL CHECK (type = ANY (ARRAY['OSINT'::text, 'PRO'::text])),
-  query_text text NOT NULL,
-  status text DEFAULT 'Processing'::text CHECK (status = ANY (ARRAY['Processing'::text, 'Success'::text, 'Failed'::text])),
-  response_time_ms integer,
-  created_at timestamp with time zone DEFAULT now(),
-  completed_at timestamp with time zone,
-  CONSTRAINT live_requests_pkey PRIMARY KEY (id),
-  CONSTRAINT live_requests_officer_id_fkey FOREIGN KEY (officer_id) REFERENCES public.officers(id)
-);
-CREATE TABLE public.manual_requests (
-  id uuid NOT NULL DEFAULT uuid_generate_v4(),
-  officer_id uuid NOT NULL,
-  input_type text NOT NULL CHECK (input_type = ANY (ARRAY['Mobile'::text, 'Email'::text, 'PAN'::text, 'Name'::text, 'Address'::text, 'Other'::text])),
-  input_value text NOT NULL,
-  notes text,
-  status text NOT NULL DEFAULT 'pending'::text CHECK (status = ANY (ARRAY['pending'::text, 'approved'::text, 'rejected'::text])),
-  admin_response text,
-  credit_deducted numeric,
-  approved_by uuid,
-  created_at timestamp with time zone NOT NULL DEFAULT now(),
-  approved_at timestamp with time zone,
-  CONSTRAINT manual_requests_pkey PRIMARY KEY (id),
-  CONSTRAINT manual_requests_approved_by_fkey FOREIGN KEY (approved_by) REFERENCES public.admin_users(id),
-  CONSTRAINT manual_requests_officer_id_fkey FOREIGN KEY (officer_id) REFERENCES public.officers(id)
-);
-CREATE TABLE public.officer_notifications (
+CREATE TABLE public.cart_items (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
-  officer_id uuid NOT NULL,
-  type text NOT NULL,
+  user_id uuid,
+  product_id uuid,
+  variant_id uuid,
+  quantity integer NOT NULL DEFAULT 1 CHECK (quantity > 0),
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT cart_items_pkey PRIMARY KEY (id),
+  CONSTRAINT cart_items_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id),
+  CONSTRAINT cart_items_product_id_fkey FOREIGN KEY (product_id) REFERENCES public.products(id),
+  CONSTRAINT cart_items_variant_id_fkey FOREIGN KEY (variant_id) REFERENCES public.product_variants(id)
+);
+CREATE TABLE public.categories (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  slug text NOT NULL UNIQUE,
+  name text NOT NULL,
+  description text DEFAULT ''::text,
+  image text DEFAULT ''::text,
+  product_count integer DEFAULT 0,
+  department_id uuid,
+  seller_id uuid,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT categories_pkey PRIMARY KEY (id),
+  CONSTRAINT categories_department_id_fkey FOREIGN KEY (department_id) REFERENCES public.departments(id),
+  CONSTRAINT categories_seller_id_fkey FOREIGN KEY (seller_id) REFERENCES auth.users(id)
+);
+CREATE TABLE public.departments (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  slug text NOT NULL UNIQUE,
+  name text NOT NULL,
+  description text DEFAULT ''::text,
+  image text DEFAULT ''::text,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT departments_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.diy_articles (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  slug text NOT NULL UNIQUE,
   title text NOT NULL,
-  message text NOT NULL,
-  read boolean NOT NULL DEFAULT false,
-  created_at timestamp with time zone NOT NULL DEFAULT now(),
-  link text,
-  CONSTRAINT officer_notifications_pkey PRIMARY KEY (id),
-  CONSTRAINT officer_notifications_officer_id_fkey FOREIGN KEY (officer_id) REFERENCES public.officers(id)
-);
-CREATE TABLE public.officer_registrations (
-  id uuid NOT NULL DEFAULT uuid_generate_v4(),
-  name text NOT NULL,
-  email text NOT NULL UNIQUE,
-  mobile text NOT NULL UNIQUE,
-  station text NOT NULL,
-  department text,
-  rank text,
-  badge_number text,
-  additional_info text,
-  status text DEFAULT 'pending'::text CHECK (status = ANY (ARRAY['pending'::text, 'approved'::text, 'rejected'::text])),
-  reviewed_at timestamp with time zone,
-  reviewed_by text,
-  rejection_reason text,
+  excerpt text DEFAULT ''::text,
+  content text DEFAULT ''::text,
+  featured_image text DEFAULT ''::text,
+  author text DEFAULT ''::text,
+  published_at timestamp with time zone DEFAULT now(),
+  category text DEFAULT ''::text,
+  tags ARRAY DEFAULT '{}'::text[],
   created_at timestamp with time zone DEFAULT now(),
-  identicard_url text,
-  telegram_id text,
-  terms_accepted_at timestamp with time zone,
-  terms_ip_address text,
-  terms_user_agent text,
-  terms_version text,
-  agreed_to_terms boolean DEFAULT false,
-  terms_agreement_pdf_url text,
-  CONSTRAINT officer_registrations_pkey PRIMARY KEY (id)
+  CONSTRAINT diy_articles_pkey PRIMARY KEY (id)
 );
-CREATE TABLE public.officers (
-  id uuid NOT NULL DEFAULT uuid_generate_v4(),
-  name text NOT NULL,
-  email text NOT NULL UNIQUE,
-  mobile text NOT NULL UNIQUE,
-  telegram_id text UNIQUE,
-  status text DEFAULT 'Active'::text CHECK (status = ANY (ARRAY['Active'::text, 'Suspended'::text])),
-  department text,
-  rank text,
-  badge_number text,
-  station text,
-  credits_remaining numeric DEFAULT 50,
-  total_credits numeric DEFAULT 50,
-  total_queries integer DEFAULT 0,
-  device_fingerprint text,
-  session_token text,
-  last_active timestamp with time zone DEFAULT now(),
-  registered_on timestamp with time zone DEFAULT now(),
-  created_at timestamp with time zone DEFAULT now(),
-  updated_at timestamp with time zone DEFAULT now(),
-  plan_id uuid,
-  plan_start_date timestamp with time zone NOT NULL DEFAULT now(),
-  current_session_id uuid,
-  auth_user_id uuid,
-  CONSTRAINT officers_pkey PRIMARY KEY (id),
-  CONSTRAINT officers_plan_id_fkey FOREIGN KEY (plan_id) REFERENCES public.rate_plans(id),
-  CONSTRAINT officers_auth_user_id_fkey FOREIGN KEY (auth_user_id) REFERENCES auth.users(id)
-);
-CREATE TABLE public.plan_apis (
+CREATE TABLE public.global_settings (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
-  plan_id uuid,
-  api_id uuid,
-  enabled boolean DEFAULT false,
-  credit_cost numeric DEFAULT 0,
-  buy_price numeric DEFAULT 0,
-  sell_price numeric DEFAULT 0,
+  default_tax_rate numeric DEFAULT 0.00,
+  tax_type text DEFAULT 'GST'::text CHECK (tax_type = ANY (ARRAY['GST'::text, 'VAT'::text, 'Sales_Tax'::text])),
+  allow_seller_tax_override boolean DEFAULT false,
+  free_shipping_threshold numeric DEFAULT 0.00,
+  default_shipping_carriers jsonb DEFAULT '[]'::jsonb,
+  platform_fulfillment_enabled boolean DEFAULT true,
+  standard_delivery_days text DEFAULT '2-5'::text,
+  express_delivery_days text DEFAULT '1-2'::text,
+  delivery_tracking_enabled boolean DEFAULT true,
   created_at timestamp with time zone DEFAULT now(),
   updated_at timestamp with time zone DEFAULT now(),
-  CONSTRAINT plan_apis_pkey PRIMARY KEY (id),
-  CONSTRAINT plan_apis_plan_id_fkey FOREIGN KEY (plan_id) REFERENCES public.rate_plans(id),
-  CONSTRAINT plan_apis_api_id_fkey FOREIGN KEY (api_id) REFERENCES public.apis(id)
+  CONSTRAINT global_settings_pkey PRIMARY KEY (id)
 );
-CREATE TABLE public.queries (
-  id uuid NOT NULL DEFAULT uuid_generate_v4(),
-  officer_id uuid,
-  officer_name text NOT NULL,
-  type text NOT NULL CHECK (type = ANY (ARRAY['OSINT'::text, 'PRO'::text])),
-  category text NOT NULL,
-  input_data text NOT NULL,
-  source text,
-  result_summary text,
-  full_result jsonb,
-  credits_used numeric DEFAULT 0,
-  status text DEFAULT 'Processing'::text CHECK (status = ANY (ARRAY['Processing'::text, 'Success'::text, 'Failed'::text, 'Pending'::text])),
-  ip_address inet,
-  user_agent text,
-  created_at timestamp with time zone DEFAULT now(),
-  consent_event_id uuid,
-  case_id text,
-  CONSTRAINT queries_pkey PRIMARY KEY (id),
-  CONSTRAINT queries_officer_id_fkey FOREIGN KEY (officer_id) REFERENCES public.officers(id)
-);
-CREATE TABLE public.rate_plans (
+CREATE TABLE public.order_items (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
-  plan_name text NOT NULL,
-  user_type text NOT NULL CHECK (user_type = ANY (ARRAY['Police'::text, 'Private'::text, 'Custom'::text])),
-  monthly_fee numeric NOT NULL,
-  default_credits numeric NOT NULL,
-  renewal_required boolean DEFAULT true,
-  topup_allowed boolean DEFAULT true,
-  status text DEFAULT 'Active'::text CHECK (status = ANY (ARRAY['Active'::text, 'Inactive'::text])),
+  order_id uuid,
+  product_id uuid,
+  variant_id uuid,
+  quantity integer NOT NULL DEFAULT 1 CHECK (quantity > 0),
+  price numeric NOT NULL,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT order_items_pkey PRIMARY KEY (id),
+  CONSTRAINT order_items_order_id_fkey FOREIGN KEY (order_id) REFERENCES public.orders(id),
+  CONSTRAINT order_items_product_id_fkey FOREIGN KEY (product_id) REFERENCES public.products(id),
+  CONSTRAINT order_items_variant_id_fkey FOREIGN KEY (variant_id) REFERENCES public.product_variants(id)
+);
+CREATE TABLE public.order_taxes (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  order_id uuid,
+  tax_type text NOT NULL,
+  tax_rate numeric NOT NULL,
+  tax_amount numeric NOT NULL,
+  applied_by text NOT NULL CHECK (applied_by = ANY (ARRAY['global'::text, 'seller'::text])),
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT order_taxes_pkey PRIMARY KEY (id),
+  CONSTRAINT order_taxes_order_id_fkey FOREIGN KEY (order_id) REFERENCES public.orders(id)
+);
+CREATE TABLE public.order_tracking (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  order_id uuid,
+  status text NOT NULL,
+  location text,
+  notes text,
+  updated_by uuid,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT order_tracking_pkey PRIMARY KEY (id),
+  CONSTRAINT order_tracking_order_id_fkey FOREIGN KEY (order_id) REFERENCES public.orders(id),
+  CONSTRAINT order_tracking_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES auth.users(id)
+);
+CREATE TABLE public.orders (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  user_id uuid,
+  order_number text NOT NULL UNIQUE,
+  status text DEFAULT 'pending'::text CHECK (status = ANY (ARRAY['pending'::text, 'processing'::text, 'shipped'::text, 'delivered'::text, 'cancelled'::text])),
+  total numeric NOT NULL,
+  shipping_address_id uuid,
+  billing_address_id uuid,
+  delivery_method text DEFAULT 'shipping'::text CHECK (delivery_method = ANY (ARRAY['shipping'::text, 'click-collect'::text])),
+  created_at timestamp with time zone DEFAULT now(),
+  fulfillment_method text DEFAULT 'platform'::text CHECK (fulfillment_method = ANY (ARRAY['platform'::text, 'seller'::text])),
+  carrier_id uuid,
+  tracking_number text,
+  estimated_delivery_date timestamp with time zone,
+  actual_delivery_date timestamp with time zone,
+  delivery_instructions text,
+  CONSTRAINT orders_pkey PRIMARY KEY (id),
+  CONSTRAINT orders_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id),
+  CONSTRAINT orders_shipping_address_id_fkey FOREIGN KEY (shipping_address_id) REFERENCES public.addresses(id),
+  CONSTRAINT orders_billing_address_id_fkey FOREIGN KEY (billing_address_id) REFERENCES public.addresses(id),
+  CONSTRAINT orders_carrier_id_fkey FOREIGN KEY (carrier_id) REFERENCES public.shipping_carriers(id)
+);
+CREATE TABLE public.product_variants (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  product_id uuid,
+  name text NOT NULL,
+  price numeric NOT NULL,
+  stock integer DEFAULT 0,
+  attributes jsonb DEFAULT '{}'::jsonb,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT product_variants_pkey PRIMARY KEY (id),
+  CONSTRAINT product_variants_product_id_fkey FOREIGN KEY (product_id) REFERENCES public.products(id)
+);
+CREATE TABLE public.products (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  slug text NOT NULL UNIQUE,
+  name text NOT NULL,
+  description text DEFAULT ''::text,
+  price numeric NOT NULL,
+  original_price numeric,
+  images ARRAY DEFAULT '{}'::text[],
+  category_id uuid,
+  department_id uuid,
+  brand text DEFAULT ''::text,
+  rating numeric DEFAULT 0 CHECK (rating >= 0::numeric AND rating <= 5::numeric),
+  review_count integer DEFAULT 0,
+  stock integer DEFAULT 0,
+  specifications jsonb DEFAULT '{}'::jsonb,
+  created_at timestamp with time zone DEFAULT now(),
+  seller_id uuid,
+  discount_type text,
+  discount_value numeric,
+  is_taxable boolean DEFAULT true,
+  is_shipping_exempt boolean DEFAULT false,
+  weight_kg numeric DEFAULT 0,
+  dimensions_cm jsonb DEFAULT '{"width": 0, "height": 0, "length": 0}'::jsonb,
+  shipping_class text DEFAULT 'standard'::text,
+  CONSTRAINT products_pkey PRIMARY KEY (id),
+  CONSTRAINT products_category_id_fkey FOREIGN KEY (category_id) REFERENCES public.categories(id),
+  CONSTRAINT products_department_id_fkey FOREIGN KEY (department_id) REFERENCES public.departments(id),
+  CONSTRAINT products_seller_id_fkey FOREIGN KEY (seller_id) REFERENCES auth.users(id)
+);
+CREATE TABLE public.seller_settings (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  seller_id uuid UNIQUE,
+  tax_registration_number text,
+  tax_rate_override numeric,
+  prices_include_tax boolean DEFAULT false,
+  fulfillment_method text DEFAULT 'platform'::text CHECK (fulfillment_method = ANY (ARRAY['platform'::text, 'self'::text])),
+  shipping_rules jsonb DEFAULT '{}'::jsonb,
+  free_shipping_threshold numeric,
+  self_delivery_enabled boolean DEFAULT false,
+  pickup_address_id uuid,
+  delivery_sla_days integer DEFAULT 5,
   created_at timestamp with time zone DEFAULT now(),
   updated_at timestamp with time zone DEFAULT now(),
-  validity_days integer DEFAULT 30,
-  carry_forward_credits_on_renewal boolean DEFAULT false,
-  CONSTRAINT rate_plans_pkey PRIMARY KEY (id)
+  CONSTRAINT seller_settings_pkey PRIMARY KEY (id),
+  CONSTRAINT seller_settings_seller_id_fkey FOREIGN KEY (seller_id) REFERENCES auth.users(id),
+  CONSTRAINT seller_settings_pickup_address_fkey FOREIGN KEY (pickup_address_id) REFERENCES public.addresses(id)
 );
-CREATE TABLE public.system_settings (
-  id uuid NOT NULL DEFAULT uuid_generate_v4(),
-  key text NOT NULL UNIQUE,
-  value jsonb NOT NULL,
-  description text,
-  updated_by text,
-  updated_at timestamp with time zone DEFAULT now(),
-  CONSTRAINT system_settings_pkey PRIMARY KEY (id)
+CREATE TABLE public.services (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  slug text NOT NULL UNIQUE,
+  name text NOT NULL,
+  description text DEFAULT ''::text,
+  image text DEFAULT ''::text,
+  price numeric NOT NULL,
+  duration text DEFAULT ''::text,
+  category text DEFAULT ''::text,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT services_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.shipping_carriers (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  name text NOT NULL,
+  code text NOT NULL UNIQUE,
+  api_endpoint text,
+  tracking_url_template text,
+  is_active boolean DEFAULT true,
+  supported_countries ARRAY DEFAULT '{Australia}'::text[],
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT shipping_carriers_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.shipping_rules (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  seller_id uuid,
+  rule_name text NOT NULL,
+  rule_type text NOT NULL CHECK (rule_type = ANY (ARRAY['free'::text, 'flat_rate'::text, 'weight_based'::text, 'price_based'::text])),
+  conditions jsonb DEFAULT '{}'::jsonb,
+  shipping_cost numeric DEFAULT 0.00,
+  carrier_id uuid,
+  is_active boolean DEFAULT true,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT shipping_rules_pkey PRIMARY KEY (id),
+  CONSTRAINT shipping_rules_seller_id_fkey FOREIGN KEY (seller_id) REFERENCES auth.users(id),
+  CONSTRAINT shipping_rules_carrier_id_fkey FOREIGN KEY (carrier_id) REFERENCES public.shipping_carriers(id)
+);
+CREATE TABLE public.user_profiles (
+  id uuid NOT NULL,
+  first_name text DEFAULT ''::text,
+  last_name text DEFAULT ''::text,
+  role text DEFAULT 'customer'::text CHECK (role = ANY (ARRAY['customer'::text, 'admin'::text, 'seller'::text])),
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT user_profiles_pkey PRIMARY KEY (id),
+  CONSTRAINT user_profiles_id_fkey FOREIGN KEY (id) REFERENCES auth.users(id)
+);
+CREATE TABLE public.wishlist (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  user_id uuid,
+  product_id uuid,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT wishlist_pkey PRIMARY KEY (id),
+  CONSTRAINT wishlist_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id),
+  CONSTRAINT wishlist_product_id_fkey FOREIGN KEY (product_id) REFERENCES public.products(id)
 );
